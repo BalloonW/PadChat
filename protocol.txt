@@ -1,0 +1,15 @@
+Protocol:
+
+[type][message]
+
+
+0 - log out
+1 - trimite nume pentru conectare, trimite parola pentru conectare
+2 - trimite nume pentru creare cont, trimite parola pentru creare cont
+3 - eroare logare 
+4 - eroare creare cont
+5 - trimte mesaj
+
+in DB: 
+
+nume    parola

@@ -1,195 +1,256 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
+#include <signal.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <pthread.h>
 
-
-#define ADDRESS "127.0.0.1"
-#define PORT 8884
-
-#define Name_length 32                //folosit pentru lungimea maxima a username-ului
-#define Message_length 1024           //folosit pentru lungimea maxima a unui mesaj
+#define LENGTH 2048
 
 
+// Global variables
+volatile sig_atomic_t flag = 0;
+int sockfd = 0;
+char name[32];
+char password[32];
+// action can be log in(action = 1) our create account(action = 2)
+int action = 0;
+int type;
 
-//O copie a fisierului primit de la server, care va contine toate usernameurile
-char *filename = "clientFile.txt";
+char *decrypt_message(char *msg)
+{
+	type = msg[0] - '0';
+	int i = 1;
+	for (i = 1; msg[i]; i++)
+	{
+		msg[i - 1] = msg[i];
+	}
+	msg[i - 2] = '\0';
+	return msg;
+}
 
-//numarul returnat de functia socket() (descriptorul soclului)
-int socket_d;
 
-
-//functia de copiere a fisierului primit de la server
-void write_file(int socket_d){
-	
-	int n;
-	FILE *f;
-	char buffer[Message_length];
-
-	f = fopen(filename, "w");
-	if(f == NULL){
-		perror("File error");
-		exit(0);
+char* create_message(char *msg, int type)
+{
+	int msg_len = strlen(msg);
+	char *message_to_send = (char*)malloc((msg_len + 2));
+	if (!message_to_send)
+	{
+		printf("memory allocation error");
+		exit(EXIT_FAILURE);
 	}
 
-	while(1){
-		n = recv(socket_d, buffer, Message_length, 0);
-		if(n<=0){
+	sprintf(message_to_send, "%d%s", type, msg);
+	return message_to_send;
+}
+
+void str_overwrite_stdout() 
+{
+    printf("\33[2K\r");
+	printf("%s", "> ");
+	fflush(stdout);
+}
+
+void str_trim_lf (char* arr, int length) 
+{
+	int i;
+	for (i = 0; i < length; i++)
+	{
+		if (arr[i] == '\n') 
+		{
+			arr[i] = '\0';
 			break;
-			return;
 		}
-		fprintf(f, "%s", buffer);
-		bzero(buffer, Message_length);
-	}
-	return;
-}
-
-//functia de verificare a usernameului introdus
-int verify_username(char username[Name_length]){
-	
-	FILE *f;
-	char names[Name_length];
-	
-	f = fopen(filename, "r");
-	if(f == NULL){
-		perror("File error");
-		exit(0);
-	}
-
-	//se parcurge fisierul si se compara fiecare username cu cel introdus de la tastatura
-	while(fgets(names, Name_length, f)){
-		if(strcmp(names, username) == 0){
-			return 0;
-		}
-		bzero(names, Name_length);
-	}
-
-	return 1;
-
-}
-
-//mesajul pe care dorim sa-l trimitem serverului
-char message_to_send[Message_length];
-//mesajul primit de la server
-char recieved_message[Message_length];
-
-
-//Se va ocupa de trimiterea mesajelor
-void send_message_thread(){
-
-	while(1){
-		printf("\n Type your message here: ");
-		fgets(message_to_send, Message_length, stdin);
-	
-		if( send(socket_d , message_to_send , strlen(message_to_send) , 0) < 0){
-			puts("Send failed");
-			return;
-		}
-
-		bzero(message_to_send, Message_length);
-	}
-
-}
-
-
-//se va ocupa de receptionarea mesajelor
-void recieve_message_thread(){
-	
-	int recieved_length; 
-	
-	while(1){
-	
-		recieved_length = recv(socket_d, recieved_message, Message_length, 0);
-		if(recieved_length > 0){
-			printf("%s\n", recieved_message);
-		}
-
-		bzero(recieved_message, Message_length);
 	}
 }
 
+void catch_ctrl_c_and_exit(int sig) 
+{
+    flag = 1;
+	char *message = create_message(name, 0);
+	send(sockfd, message, sizeof(message), 0);
+}
+
+void send_msg_handler() 
+{
+  	char message[LENGTH] = {};
+	char buffer[LENGTH + 34] = {};
 
 
-int main(int argc , char *argv[]){
 
-	struct sockaddr_in server;
-	char Username[Name_length], Password[Name_length];
+	while(1) 
+	{
+		str_overwrite_stdout();
+		fgets(message, LENGTH, stdin);
+		str_trim_lf(message, LENGTH);
 
-	//Creare socket
-	socket_d = socket(AF_INET , SOCK_STREAM , 0);
-	if (socket_d == -1){
-		printf("Could not create socket");
-	}
+		if (strcmp(message, "exit") == 0) 
+		{
+			break;
+		} 
+		else 
+		{
+			sprintf(buffer, "%s: %s\n", name, message);
+			char *c_mess = create_message(buffer, 5);
+			send(sockfd, c_mess, strlen(c_mess), 0);
+		} 
 
-	server.sin_addr.s_addr = inet_addr(ADDRESS);
-	server.sin_family = AF_INET;
-	server.sin_port = htons( PORT );
+		bzero(message, LENGTH);
+		bzero(buffer, LENGTH + 32);
+  	}
+ 	catch_ctrl_c_and_exit(2);
+}
 
-	//Conectarea la server
-	if (connect(socket_d , (struct sockaddr *)&server , sizeof(server)) < 0){
-		perror("connect failed. Error");
-		return 1;
-	}
+void recv_msg_handler() 
+{
+	char message[LENGTH] = {};
+  	while (1) 
+	{
 
-	printf("Connected to the server\n");
-	
+		int receive = recv(sockfd, message, LENGTH, 0);
+		char *aux = decrypt_message(message);
+    	if (receive > 0) 
+		{
+			switch (type)
+			{
+				case 3:
+					printf("Username or password is not correct!\n");
+					exit(1);
+					break;
+				case 4:
+					printf("Username already exists!\n");
+					exit(1);
+					break;
+				case 5:
+					printf("%s", aux);
+					str_overwrite_stdout();
+					break;
+				
+				default:
+					break;
+			}
+    	} 
+		else if (receive == 0) 
+		{
+			break;
+    	} 
+		else 
+		{
+			// -1
+		}
+		memset(aux, 0, 2048);
+  	}
+}
 
-	//am comentat aici pana va fi implementata pe partea de server trimiterea fisieului cu username-urile
-	//write_file(sock);
 
-	printf("\nEnter your username: ");
-	fgets(Username, Name_length, stdin);
-	
-
-	//verificarea valabilitatii username-ului
-	while( verify_username(Username) == 0 ){
-		bzero(Username, Name_length);
-		printf("\n===== Username already in use =====\n");
-		printf("\nPlease enter a new username: ");
-		fgets(Username, 32, stdin);
-	}
-
-	printf("\nEnter your password: ");
-	fgets(Password, Name_length, stdin);
-
-
-	//trimite username-ul catre server
-	if( send(socket_d , Username , strlen(Username) , 0) < 0){
-		puts("Send failed");
-		return 1;
-	}
-
-
-	//trimite parola catre  server
-	if( send(socket_d , Password , strlen(Password) , 0) < 0){
-		puts("Send failed");
-		return 1;
-	}
-
-	//vom folosi fire de executie pentru a putea trimite si receptiona mesaje in paralel
-
-	//fir de executie pentru trimiterea mesajelor
-	pthread_t send_message;
-
-	if(pthread_create(&send_message, NULL, (void *) send_message_thread, NULL ) != 0){
-		printf("PTHREAD ERROR\n\n");
+int main(int argc, char **argv)
+{
+	if(argc != 2)
+	{
+		printf("Usage: %s <port>\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
+	char *ip = "127.0.0.1";
+	int port = atoi(argv[1]);
 
-	//fir de executie pentru receptionarea mesajelor
-	pthread_t recieve_message;
-	if(pthread_create(&recieve_message, NULL, (void *) recieve_message_thread, NULL ) != 0){
-		printf("PTHREAD ERROR\n\n");
+	signal(SIGINT, catch_ctrl_c_and_exit);
+
+	struct sockaddr_in server_addr;
+
+	/* Socket settings */
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  	server_addr.sin_family = AF_INET;
+  	server_addr.sin_addr.s_addr = inet_addr(ip);
+  	server_addr.sin_port = htons(port);
+
+
+    /* Connect to Server */
+  	int err = connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+  	if (err == -1) 
+	{
+		printf("ERROR: connect\n");
 		return EXIT_FAILURE;
 	}
-	
-	//merge chatul pana dam ctrl+c
-	while(1){}
 
-	close(socket_d);
-	return 0;
+	/* Sign in or Sign up */
+	printf("To sign in - press 1\n");
+	printf("To sign up - press 2\n");
+	scanf("%d", &action);
+	getchar();
+
+	/* If action is not valid */
+	if (action < 1 || action > 2)
+	{
+		printf("This is not a valid action\n");
+		return EXIT_FAILURE;
+	}
+
+	
+	printf("Please enter your name: ");
+	fgets(name, 32, stdin);
+	str_trim_lf(name, strlen(name));
+
+	if (strlen(name) > 32 || strlen(name) < 2)
+	{
+		printf("Name must be less than 30 and more than 2 characters.\n");
+		return EXIT_FAILURE;
+	}
+
+	printf("Please enter your password: ");
+	fgets(password, 32, stdin);
+	str_trim_lf(password, strlen(password));
+
+	if (strlen(password) > 32 || strlen(password) < 2)
+	{
+		printf("Password must be less than 30 and more than 2 characters.\n");
+	}
+
+	if (action == 1)	
+	{
+        char *name_password = (char*)malloc(strlen(name) + strlen(password) + 1);
+        sprintf(name_password, "%s\t%s\n", name, password);
+		char *message = create_message(name_password, 1);
+		send(sockfd, message, 65, 0);
+	}
+
+	if (action == 2)	
+	{
+        char *name_password = (char*)malloc(strlen(name) + strlen(password) + 1);
+        sprintf(name_password, "%s\t%s\n", name, password);
+		char *message = create_message(name_password, 2);
+		send(sockfd, message, 65, 0);
+	}
+
+	printf("=== WELCOME TO THE CHATROOM ===\n");
+
+	pthread_t send_msg_thread;
+  	if (pthread_create(&send_msg_thread, NULL, (void *) send_msg_handler, NULL) != 0)
+	{
+		printf("ERROR: pthread\n");
+    	return EXIT_FAILURE;
+	}
+
+	pthread_t recv_msg_thread;
+  	if (pthread_create(&recv_msg_thread, NULL, (void *) recv_msg_handler, NULL) != 0)
+	{
+		printf("ERROR: pthread\n");
+		return EXIT_FAILURE;
+	}
+
+	while (1)
+	{
+		if (flag)
+		{
+			printf("\nBye\n");
+			break;
+    	}
+	}
+
+	close(sockfd);
+	return EXIT_SUCCESS;
 }
