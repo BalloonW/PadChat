@@ -1,0 +1,7 @@
+user    password
+user	password
+alexandra	pass
+olga	olga
+adrian	hello
+ale	ale
+zoli	zoli
