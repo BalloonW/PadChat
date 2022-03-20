@@ -86,6 +86,8 @@ void send_msg_handler()
 	{
 		str_overwrite_stdout();
 		fgets(message, LENGTH, stdin);
+		if(!strchr(message, '\n'))     //newline does not exist
+    		while(fgetc(stdin)!='\n');    //discard until newline
 		str_trim_lf(message, LENGTH);
 
 		if (strcmp(message, "exit") == 0) 
