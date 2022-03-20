@@ -124,7 +124,7 @@ char *decrypt_message(char *msg)
 {
 	type = msg[0] - '0';
 	int i = 1;
-	for (i = 1; msg[i]; i++)
+	for (i = 1; BUFFER_SZ; i++)
 	{
 		msg[i - 1] = msg[i];
 	}
