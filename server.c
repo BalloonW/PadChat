@@ -64,9 +64,9 @@ void print_client_addr(struct sockaddr_in addr)
 void queue_add(client_t *cl){
 	pthread_mutex_lock(&clients_mutex);
 
-	for(int i=0; i < MAX_CLIENTS; ++i)
+	for (int i=0; i < MAX_CLIENTS; ++i)
 	{
-		if(!clients[i])
+		if (!clients[i])
 		{
 			clients[i] = cl;
 			break;
@@ -124,7 +124,7 @@ char *decrypt_message(char *msg)
 {
 	type = msg[0] - '0';
 	int i = 1;
-	for (i = 1; BUFFER_SZ; i++)
+	for (i = 1; i < BUFFER_SZ; i++)
 	{
 		msg[i - 1] = msg[i];
 	}
@@ -157,7 +157,7 @@ void *handle_client(void *arg){
 		else
 		{
 			char *msg = decrypt_message(buff_out);
-			// printf("%s", msg);
+			// printf("%s type = %d\n", msg, type);
 			char left_chat_msg[200];
 
 			char name[32]; 

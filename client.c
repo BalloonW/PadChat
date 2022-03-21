@@ -13,6 +13,10 @@
 
 
 // Global variables
+// sig_atomic_t este mereu int, si se foloseste pentru ca read si write are loc in aceasi instructiune, 
+// astfel nu exista un hadler care sa citeasca in mijlocul instructiuni
+// volatile optimizeaza ca flag se va modifica des
+// volatile sig_atomic_t se prefera pentru async-signal-safe
 volatile sig_atomic_t flag = 0;
 int sockfd = 0;
 char name[32];
@@ -50,8 +54,10 @@ char* create_message(char *msg, int type)
 
 void str_overwrite_stdout() 
 {
-    printf("\33[2K\r");
+	
+    printf("\33[2K\r"); //sterge continutul curent de la stout
 	printf("%s", "> ");
+	// se asigura ca va fi afisat pe display ce avem la printf
 	fflush(stdout);
 }
 
@@ -78,16 +84,26 @@ void catch_ctrl_c_and_exit(int sig)
 void send_msg_handler() 
 {
   	char message[LENGTH] = {};
-	char buffer[LENGTH + 34] = {};
+	char buffer[LENGTH + 35] = {};
 
 
 
 	while(1) 
 	{
 		str_overwrite_stdout();
-		fgets(message, LENGTH, stdin);
-		if(!strchr(message, '\n'))     //newline does not exist
-    		while(fgetc(stdin)!='\n');    //discard until newline
+		int j = 0;
+		char c;
+		while((c = fgetc(stdin))!='\n' && j != LENGTH - 3) //discard until newline
+		{
+			message[j++] = c;
+		} 
+		if (j == LENGTH - 3)
+		{
+			printf("\nMessage is too long. Length should not exced 2045 characters.\n");
+			while (fgetc(stdin)!='\n');
+			bzero(message, LENGTH);
+			continue;
+		}
 		str_trim_lf(message, LENGTH);
 
 		if (strcmp(message, "exit") == 0) 
@@ -102,7 +118,7 @@ void send_msg_handler()
 		} 
 
 		bzero(message, LENGTH);
-		bzero(buffer, LENGTH + 32);
+		bzero(buffer, LENGTH + 35);
   	}
  	catch_ctrl_c_and_exit(2);
 }
@@ -111,8 +127,7 @@ void recv_msg_handler()
 {
 	char message[LENGTH] = {};
   	while (1) 
-	{
-
+	{	
 		int receive = recv(sockfd, message, LENGTH, 0);
 		char *aux = decrypt_message(message);
     	if (receive > 0) 
