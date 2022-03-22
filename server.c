@@ -13,8 +13,8 @@
 #define MAX_CLIENTS 100
 #define BUFFER_SZ 2048
 
-static _Atomic unsigned int cli_count = 0;
-static int uid = 10;
+_Atomic unsigned int cli_count = 0;
+int uid = 10;
 int action = 0;
 FILE *data_base = NULL;
 int type = -1;
@@ -179,10 +179,6 @@ void *handle_client(void *arg){
 					send_message(left_chat_msg, cli->uid);
 					break;
 				case 1:
-					// log in 
-					// verifica daca este in db	
-					// trimite eroare
-
 					/* open data base */
 					data_base = fopen("data_base.txt", "a+");
 					if (data_base == NULL)
@@ -221,13 +217,8 @@ void *handle_client(void *arg){
 						send(cli->sockfd, not_valid_user, 100, 0);
 						pthread_mutex_unlock(&clients_mutex);
 					}
-
 					break;
-				case 2:
-					// creare cont (sign up)
-					// VERIFICA DACA ESTE IN DB
-					// TRIMITE EROARE DACA II, SAU SUCCES DACA NU II
-					
+				case 2:					
 					data_base = fopen("data_base.txt", "a+");
 					if (data_base == NULL)
 					{
@@ -305,7 +296,7 @@ int main(int argc, char **argv)
   	/* Ignore pipe signals */
 	signal(SIGPIPE, SIG_IGN);
 
-	if (setsockopt(listenfd, SOL_SOCKET,(SO_REUSEPORT | SO_REUSEADDR), (char*)&option,sizeof(option)) < 0)
+	if (setsockopt(listenfd, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR), (char*)&option,sizeof(option)) < 0)
 	{
 		perror("ERROR: setsockopt failed");
     	return EXIT_FAILURE;
@@ -351,9 +342,6 @@ int main(int argc, char **argv)
 		/* Add client to the queue and fork thread */
 		queue_add(cli);
 		pthread_create(&tid, NULL, &handle_client, (void*)cli);
-
-		/* Reduce CPU usage */
-		sleep(1);
 	}
 
 	return EXIT_SUCCESS;

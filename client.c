@@ -53,8 +53,7 @@ char* create_message(char *msg, int type)
 }
 
 void str_overwrite_stdout() 
-{
-	
+{	
     printf("\33[2K\r"); //sterge continutul curent de la stout
 	printf("%s", "> ");
 	// se asigura ca va fi afisat pe display ce avem la printf
@@ -92,11 +91,17 @@ void send_msg_handler()
 	{
 		str_overwrite_stdout();
 		int j = 0;
-		char c;
-		while((c = fgetc(stdin))!='\n' && j != LENGTH - 3) //discard until newline
+		char c;	
+
+		while((c = fgetc(stdin)) != '\n' && j != LENGTH - 3) //discard until newli
 		{
 			message[j++] = c;
 		} 
+		// if null message is sent
+		if (c == '\n' && j== 0)
+		{
+			continue;
+		}
 		if (j == LENGTH - 3)
 		{
 			printf("\nMessage is too long. Length should not exced 2045 characters.\n");
